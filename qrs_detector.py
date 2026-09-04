@@ -230,6 +230,12 @@ def detect_r_peaks(ecg, fs, refractory_sec=0.200):
 
     Returns (r_peak_indices, pipeline_dict).
     """
+    if fs <= 0:
+        raise ValueError(f"Sampling rate fs must be positive, got {fs}")
+    if refractory_sec < 0:
+        raise ValueError(f"Refractory period must be non-negative, got {refractory_sec}")
+    if not ecg:
+        return [], {"filtered": [], "derivative": [], "squared": [], "integrated": [], "r_peak_indices": []}
     pt = pan_tompkins_pipeline(ecg, fs)
     integ = pt["integrated"]
 
@@ -301,6 +307,8 @@ def compute_hrv_metrics(r_peak_indices, fs):
         n_beats, mean_hr_bpm, instantaneous_hr_bpm (list),
         rr_intervals_ms (list), sdnn_ms, rmssd_ms, pnn50_pct
     """
+    if fs <= 0:
+        raise ValueError(f"Sampling rate fs must be positive, got {fs}")
     n_beats = len(r_peak_indices)
     nan = float("nan")
 
@@ -411,6 +419,12 @@ def generate_synthetic_ecg(duration_sec=30.0, fs=250.0, heart_rate_bpm=70.0,
 
     Returns (samples_list, true_r_peak_indices).
     """
+    if duration_sec <= 0:
+        raise ValueError(f"Duration must be positive, got {duration_sec}")
+    if fs <= 0:
+        raise ValueError(f"Sampling rate fs must be positive, got {fs}")
+    if heart_rate_bpm <= 0:
+        raise ValueError(f"Heart rate must be positive, got {heart_rate_bpm}")
     # Simple LCG random number generator for reproducibility
     class SimpleRNG:
         def __init__(self, seed):

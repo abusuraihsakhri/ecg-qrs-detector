@@ -309,106 +309,6 @@ class EchocardiographicStrainAnalysisIntegrationGlsGlpsEngine:
         return res
 
 # =============================================================================
-# 7. CLINICAL RATIONALE
-# =============================================================================
-@dataclass
-class ClinicalRationaleEngineResult:
-    feature_name: str = "Clinical Rationale"
-    status: str = "OPTIMAL"
-    score: float = 0.0
-    metrics: Dict[str, Any] = field(default_factory=dict)
-    alerts: List[str] = field(default_factory=list)
-    recommendations: List[str] = field(default_factory=list)
-    timestamp: str = field(default_factory=lambda: datetime.datetime.now(datetime.timezone.utc).isoformat())
-
-class ClinicalRationaleEngine:
-    """
-    Clinical Rationale: QRS morphology correlates with myocardial activation patterns that affect strain. Bundle branch blocks and ventricular d
-    """
-    def __init__(self, threshold: float = 1.0, config: Optional[Dict[str, Any]] = None):
-        self.threshold = threshold
-        self.config = config or {}
-        self.history: List[ClinicalRationaleEngineResult] = []
-
-    def evaluate(self, primary_value: float, secondary_value: float = 0.0, **kwargs) -> ClinicalRationaleEngineResult:
-        alerts = []
-        recs = []
-        status = "OPTIMAL"
-        score = round(float(primary_value), 3)
-
-        if primary_value > self.threshold * 2:
-            status = "CRITICAL_ALERT"
-            alerts.append(f"Clinical Rationale: Primary value {primary_value:.2f} breached critical threshold ({self.threshold * 2:.2f})")
-            recs.append("Initiate immediate protocol review and escalate to attending lead.")
-        elif primary_value > self.threshold:
-            status = "WARNING"
-            alerts.append(f"Clinical Rationale: Value {primary_value:.2f} exceeds baseline threshold ({self.threshold:.2f})")
-            recs.append("Increase monitoring frequency and perform secondary verification.")
-        else:
-            recs.append("Parameters nominal under standard operating bounds.")
-
-        res = ClinicalRationaleEngineResult(
-            feature_name="Clinical Rationale",
-            status=status,
-            score=score,
-            metrics={"primary": primary_value, "secondary": secondary_value, **kwargs},
-            alerts=alerts,
-            recommendations=recs
-        )
-        self.history.append(res)
-        return res
-
-# =============================================================================
-# 8. IMPLEMENTATION PLAN
-# =============================================================================
-@dataclass
-class ImplementationPlanEngineResult:
-    feature_name: str = "Implementation Plan"
-    status: str = "OPTIMAL"
-    score: float = 0.0
-    metrics: Dict[str, Any] = field(default_factory=dict)
-    alerts: List[str] = field(default_factory=list)
-    recommendations: List[str] = field(default_factory=list)
-    timestamp: str = field(default_factory=lambda: datetime.datetime.now(datetime.timezone.utc).isoformat())
-
-class ImplementationPlanEngine:
-    """
-    Implementation Plan: - **QRS-Strain Correlation**: Link QRS duration/morphology to GLS/GLPS values
-    """
-    def __init__(self, threshold: float = 1.0, config: Optional[Dict[str, Any]] = None):
-        self.threshold = threshold
-        self.config = config or {}
-        self.history: List[ImplementationPlanEngineResult] = []
-
-    def evaluate(self, primary_value: float, secondary_value: float = 0.0, **kwargs) -> ImplementationPlanEngineResult:
-        alerts = []
-        recs = []
-        status = "OPTIMAL"
-        score = round(float(primary_value), 3)
-
-        if primary_value > self.threshold * 2:
-            status = "CRITICAL_ALERT"
-            alerts.append(f"Implementation Plan: Primary value {primary_value:.2f} breached critical threshold ({self.threshold * 2:.2f})")
-            recs.append("Initiate immediate protocol review and escalate to attending lead.")
-        elif primary_value > self.threshold:
-            status = "WARNING"
-            alerts.append(f"Implementation Plan: Value {primary_value:.2f} exceeds baseline threshold ({self.threshold:.2f})")
-            recs.append("Increase monitoring frequency and perform secondary verification.")
-        else:
-            recs.append("Parameters nominal under standard operating bounds.")
-
-        res = ImplementationPlanEngineResult(
-            feature_name="Implementation Plan",
-            status=status,
-            score=score,
-            metrics={"primary": primary_value, "secondary": secondary_value, **kwargs},
-            alerts=alerts,
-            recommendations=recs
-        )
-        self.history.append(res)
-        return res
-
-# =============================================================================
 # COMPOSITE ENRICHMENT SUITE
 # =============================================================================
 class EcgqrsdetectorEnrichmentSuite:
@@ -420,8 +320,6 @@ class EcgqrsdetectorEnrichmentSuite:
         self.filestocreatemodifye = FilesToCreatemodifyEngine()
         self.acceptancecriteriaen = AcceptanceCriteriaEngine()
         self.echocardiographicstr = EchocardiographicStrainAnalysisIntegrationGlsGlpsEngine()
-        self.clinicalrationaleeng = ClinicalRationaleEngine()
-        self.implementationplanen = ImplementationPlanEngine()
 
     def execute_all(self, primary_val: float = 1.5, secondary_val: float = 0.5) -> Dict[str, Any]:
         results = {}
@@ -431,8 +329,6 @@ class EcgqrsdetectorEnrichmentSuite:
         results["FilesToCreatemodifyEngine"] = self.filestocreatemodifye.evaluate(primary_val, secondary_val)
         results["AcceptanceCriteriaEngine"] = self.acceptancecriteriaen.evaluate(primary_val, secondary_val)
         results["EchocardiographicStrainAnalysisIntegrationGlsGlpsEngine"] = self.echocardiographicstr.evaluate(primary_val, secondary_val)
-        results["ClinicalRationaleEngine"] = self.clinicalrationaleeng.evaluate(primary_val, secondary_val)
-        results["ImplementationPlanEngine"] = self.implementationplanen.evaluate(primary_val, secondary_val)
         return results
 
 # Global instance

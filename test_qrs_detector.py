@@ -243,6 +243,34 @@ class TestArrhythmiaDetection:
 
 # ── CSV loading ─────────────────────────────────────────────────────
 
+class TestInputValidation:
+    def test_detect_r_peaks_invalid_fs(self):
+        with pytest.raises(ValueError, match="Sampling rate fs must be positive"):
+            detect_r_peaks([1.0, 2.0, 3.0], fs=0)
+        with pytest.raises(ValueError, match="Sampling rate fs must be positive"):
+            detect_r_peaks([1.0, 2.0, 3.0], fs=-100)
+
+    def test_detect_r_peaks_negative_refractory(self):
+        with pytest.raises(ValueError, match="Refractory period must be non-negative"):
+            detect_r_peaks([1.0, 2.0, 3.0], fs=250, refractory_sec=-0.1)
+
+    def test_detect_r_peaks_empty_signal(self):
+        r_peaks, pt = detect_r_peaks([], fs=250)
+        assert len(r_peaks) == 0
+
+    def test_compute_hrv_metrics_invalid_fs(self):
+        with pytest.raises(ValueError, match="Sampling rate fs must be positive"):
+            compute_hrv_metrics([0, 100, 200], fs=0)
+
+    def test_generate_synthetic_ecg_invalid_params(self):
+        with pytest.raises(ValueError, match="Duration must be positive"):
+            generate_synthetic_ecg(duration_sec=0, fs=250)
+        with pytest.raises(ValueError, match="Sampling rate fs must be positive"):
+            generate_synthetic_ecg(fs=0)
+        with pytest.raises(ValueError, match="Heart rate must be positive"):
+            generate_synthetic_ecg(heart_rate_bpm=0)
+
+
 class TestCSVLoding:
     def test_two_column_csv(self):
         fs_true = 200.0

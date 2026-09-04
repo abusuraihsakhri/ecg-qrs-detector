@@ -1,7 +1,7 @@
-# ECG Qrs Detector
+# ECG QRS Detector
 
-> **Domain:** Cardiovascular Medicine & Hemodynamic Analytics  
-> **Reference Guidelines & Standards:** `AHA/ACC Practice Guidelines & ESC Clinical Standards`
+> **Domain:** Cardiovascular Medicine & Hemodynamic Analytics
+> **Reference Guidelines & Standards:** AHA/ACC Practice Guidelines & ESC Clinical Standards
 
 <div align="center">
 
@@ -16,12 +16,9 @@
 
 ---
 
-## 📖 What It Does
+## What It Does
 
-ECG QRS Detector
-================
-
-Detects R-peaks in a digitized single-lead ECG signal using a
+ECG QRS Detector detects R-peaks in a digitized single-lead ECG signal using a
 simplified Pan-Tompkins (1985) real-time QRS detection algorithm,
 then derives heart rate and standard time-domain heart-rate-variability
 (HRV) metrics from the resulting R-R interval series.
@@ -36,112 +33,165 @@ Pipeline (Pan, J. & Tompkins, W.J., IEEE Trans. Biomed. Eng., 1985):
       -> adaptive thresholding
 
 Time-domain HRV formulas:
-    SDNN  = standard deviation of all N-N (R-R) intervals
-    RMSSD = root mean square of successive differences between N-N intervals
-    pNN50 = percentage of successive N-N interval differences > 50 ms
+- **SDNN**  = standard deviation of all N-N (R-R) intervals
+- **RMSSD** = root mean square of successive differences between N-N intervals
+- **pNN50** = percentage of successive N-N interval differences > 50 ms
 
-Stdlib only — no numpy/scipy required.
-
----
-
-## ⚙️ Key Capabilities & Algorithmic Modules
-
-### 🔬 Analytical Functions
-
-- **`load_ecg_csv()`**: Load a single-lead ECG waveform from a CSV file.
-
-Accepted formats (auto-detected from the header row):
-  - two columns: time_seconds, amplitude  -> fs derived from time column
-  - one column: amplitude                 -> fs must be supplied
-
-Returns (samples_list, fs).
-- **`bandpass_filter()`**: Bandpass filter using Pan-Tompkins cascaded low-pass + high-pass.
-
-The LP filter removes high-frequency noise; the HP filter removes
-baseline wander and DC offset. Together they isolate the 5-15 Hz
-band where QRS energy is concentrated.
-
-Uses the original Pan-Tompkins integer-coefficient difference equations:
-  LP: y[n] = 2*y[n-1] - y[n-2] + x[n] - 2*x[n-6] + x[n-12]
-  HP: y[n] = y[n-1] - x[n]/32 + x[n-16] - x[n-17] + x[n-32]/32
-- **`lowpass_filter()`**: Pan-Tompkins low-pass filter (integer coefficients).
-
-Difference equation: y[n] = 2*y[n-1] - y[n-2] + x[n] - 2*x[n-6] + x[n-12]
-- **`highpass_filter()`**: Pan-Tompkins high-pass filter (integer coefficients).
-
-Difference equation: y[n] = y[n-1] - x[n]/32 + x[n-16] - x[n-17] + x[n-32]/32
-- **`derivative_filter()`**: 5-point derivative approximation from Pan-Tompkins:
-y[n] = (1/8T)(-x[n-2] - 2x[n-1] + 2x[n+1] + x[n+2])
+Stdlib only for core detection — no numpy/scipy required.
 
 ---
 
-## 📐 Mathematical Formulation & Logic
+## Installation
 
-```text
-  Time-domain HRV formulas:
+```bash
+# Clone the repository
+git clone https://github.com/abusuraihsakhri/ecg-qrs-detector.git
+cd ecg-qrs-detector
+
+# Create virtual environment (recommended)
+python -m venv .venv
+.venv\Scripts\activate  # Windows
+# source .venv/bin/activate  # Linux/Mac
+
+# Install dependencies
+pip install -r requirements.txt
+pip install fastapi uvicorn pydantic pytest
 ```
 
 ---
 
-## 💻 CLI Quickstart & Usage
+## Usage
 
-### 1. Guided Interactive Mode
+### Command Line Interface
+
+#### 1. Detect R-peaks from a CSV file
 ```bash
-python cli.py
+python cli.py detect sample_ecg.csv
+python cli.py detect sample_ecg.csv --fs 250 --refractory 0.200 --out-csv peaks.csv
 ```
 
-### 2. Direct Parameterized Evaluation
+#### 2. Run demo with synthetic ECG
 ```bash
-python cli.py --fs <value> --refractory <value> --out-csv <value> --duration <value>
+python cli.py demo --duration 30 --fs 250 --hr 70
 ```
 
-### Parameter Reference
-- `--fs`: Specifies input measurement or parameter value.
-- `--refractory`: Specifies input measurement or parameter value.
-- `--out-csv`: Specifies input measurement or parameter value.
-- `--duration`: Specifies input measurement or parameter value.
-- `--hr`: Specifies input measurement or parameter value.
+#### 3. Audit commands
+```bash
+python cli.py audit --task-id MY-TASK-01
+python cli.py chat "Explain QRS detection"
+python cli.py verify-audit
+```
 
-### Input Data Schema
+#### 4. Direct module usage
+```bash
+python qrs_detector.py sample_ecg.csv --fs 250
+```
 
-| Field | Description | Requirement |
-|:------|:------------|:------------|
-| `suite_name` | Parameter / observation metric | Required |
-| `system_slug` | Parameter / observation metric | Required |
-| `standard_reference` | Parameter / observation metric | Required |
-| `test_cases` | Parameter / observation metric | Required |
+### Python API
+
+```python
+from qrs_detector import load_ecg_csv, detect_r_peaks, compute_hrv_metrics, detect_arrhythmia
+
+# Load ECG data
+samples, fs = load_ecg_csv("sample_ecg.csv")
+
+# Detect R-peaks
+r_peaks, pipeline = detect_r_peaks(samples, fs, refractory_sec=0.200)
+
+# Compute HRV metrics
+metrics = compute_hrv_metrics(r_peaks, fs)
+print(f"Mean HR: {metrics['mean_hr_bpm']:.1f} bpm")
+print(f"SDNN: {metrics['sdnn_ms']:.2f} ms")
+print(f"RMSSD: {metrics['rmssd_ms']:.2f} ms")
+
+# Detect arrhythmia
+arrhythmia = detect_arrhythmia(metrics)
+print(f"Rhythm: {arrhythmia['rhythm']}")
+```
+
+### FastAPI Web Server
+
+```bash
+uvicorn agents.api:app --reload
+```
+
+Endpoints:
+- `GET /health` - Health check
+- `GET /metrics` - Prometheus metrics
+- `POST /api/audit` - Process audit task
+- `POST /api/chat` - Query supervisory chat
+- `GET /api/audit/logs` - View audit trail
 
 ---
 
-## 🛡️ Security & Enterprise Architecture
+## Input Data Format
 
-* **Zero-PHI Outbound Interceptor:** Active AST and regex inspection blocking SSNs, MRNs, phone numbers, and patient identifiers.
-* **Tamper-Evident HMAC-SHA256 Audit Trail:** Chained, cryptographically signed logs for every evaluation and state transition.
-* **Air-Gapped LLM Reasoning Adapter:** Agnostic integration for local Ollama instances (`llama3`, `mistral`), Claude 3.5 Sonnet, GPT-4o, and deterministic test mocks.
-* **Active Learning Bayesian Calibration:** Dynamic tracker updating worker reliability weights and monitoring Brier calibration drift.
-* **FastAPI & Prometheus Telemetry:** Exposes OpenAPI 3.1 REST endpoints and operational Prometheus metrics (`/metrics`).
+### CSV Format (auto-detected)
+
+**Two columns** (time, amplitude):
+```csv
+time_s,amplitude_mV
+0.000,0.001
+0.004,0.003
+...
+```
+
+**One column** (amplitude only, requires `--fs`):
+```csv
+amplitude_mV
+0.001
+0.003
+...
+```
 
 ---
 
-## 🧪 Testing & Verification
+## Key Modules
 
-Run the automated test suite:
+| Module | Description |
+|:-------|:------------|
+| `qrs_detector.py` | Core Pan-Tompkins algorithm, filtering, R-peak detection, HRV metrics |
+| `cli.py` | Command-line interface with detect, demo, audit, chat commands |
+| `agents/base.py` | PHI guard, HMAC-SHA256 audit trail, security utilities |
+| `agents/supervisor.py` | Multi-worker orchestration and consensus |
+| `agents/workers.py` | QC, safety, and protocol conformance workers |
+| `agents/api.py` | FastAPI REST endpoints |
+| `enrichment.py` | Domain enrichment and analysis engines |
+| `simulator.py` | High-throughput simulation testing |
+
+---
+
+## Security Features
+
+- **Zero-PHI Outbound Interceptor:** AST and regex inspection blocking SSNs, MRNs, phone numbers, and patient identifiers
+- **Tamper-Evident HMAC-SHA256 Audit Trail:** Chained, cryptographically signed logs
+- **Configurable Audit Key:** Set `AUDIT_SECRET_KEY` environment variable for persistent audit trails
+
+---
+
+## Testing
 
 ```bash
+# Run all tests
 pytest -v
-```
 
-Execute high-throughput batch simulation benchmarks:
-
-```bash
-python simulator.py --tasks 1000 --concurrency 8
+# Run specific test files
+pytest test_qrs_detector.py -v
+pytest tests/test_ecg_qrs_detector.py -v
+pytest tests/test_enrichment.py -v
 ```
 
 ---
 
-## 🐳 Container Deployment
+## Container Deployment
 
 ```bash
 docker build -t ecg-qrs-detector .
 docker run -p 8000:8000 ecg-qrs-detector
 ```
+
+---
+
+## License
+
+MIT License - see [LICENSE](LICENSE) for details.

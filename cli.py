@@ -13,6 +13,9 @@ from qrs_detector import (
     main as detector_main,
 )
 
+from agents.supervisor import SystemSupervisor
+from agents.base import AuditLogger
+
 
 def main(argv=None):
     parser = argparse.ArgumentParser(
@@ -33,6 +36,17 @@ def main(argv=None):
     demo.add_argument("--duration", type=float, default=30.0, help="Duration in seconds")
     demo.add_argument("--fs", type=float, default=250.0, help="Sampling rate in Hz")
     demo.add_argument("--hr", type=float, default=70.0, help="Heart rate in bpm")
+
+    # Audit command
+    audit = subparsers.add_parser("audit", help="Run audit task via supervisor")
+    audit.add_argument("--task-id", default="CLI-AUDIT-01", help="Task identifier")
+
+    # Chat command
+    chat = subparsers.add_parser("chat", help="Query the supervisory chat system")
+    chat.add_argument("query", nargs="+", help="Query text")
+
+    # Verify audit command
+    subparsers.add_parser("verify-audit", help="Verify HMAC audit trail integrity")
 
     args = parser.parse_args(argv)
 
@@ -68,6 +82,32 @@ def main(argv=None):
             "flags": arrhythmia["flags"],
         }
         print(json.dumps(result, indent=2))
+        return 0
+
+    if args.command == "audit":
+        supervisor = SystemSupervisor(model_provider="mock")
+        from agents.models import SystemTaskPayload
+        payload = SystemTaskPayload(
+            task_id=args.task_id,
+            target_identifier="CLI-TARGET",
+            primary_metric=10.0,
+            secondary_metric=5.0,
+            status_descriptor="NOMINAL",
+        )
+        dossier = supervisor.process_task(payload)
+        print(json.dumps(dossier.to_dict(), indent=2, default=str))
+        return 0
+
+    if args.command == "chat":
+        supervisor = SystemSupervisor(model_provider="mock")
+        query = " ".join(args.query)
+        response = supervisor.query_supervisory_chat(query)
+        print(json.dumps({"response": response}, indent=2))
+        return 0
+
+    if args.command == "verify-audit":
+        verified = AuditLogger.verify_integrity()
+        print(json.dumps({"audit_integrity_verified": verified, "blocks": len(AuditLogger.get_trail())}, indent=2))
         return 0
 
     parser.print_help()
