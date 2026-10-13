@@ -1,40 +1,75 @@
-name: Ecg Qrs Detector CI/CD & Security Verification
+name: ECG QRS Detector CI
 
 on:
   push:
-    branches: [ master, main ]
+    branches: [master, main]
   pull_request:
-    branches: [ master, main ]
+    branches: [master, main]
 
 jobs:
-  test-and-audit:
+  test:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         python-version: ["3.10", "3.11", "3.12"]
-
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+      - name: Install runtime and test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pytest
+      - name: Compile Python sources
+        run: python -m compileall -q qrs_detector.py cli.py agents enrichment.py web/analysis.py
+      - name: Run tests
+        run: python -m pytest -q
+      - name: Check web JavaScript syntax
+        run: node --check web/app.js
+      - name: Validate container configuration
+        run: |
+          grep -q 'CMD \["uvicorn"' Dockerfile
+          ! grep -Eq 'prod-audit-key|master-audit-key|COPY pyproject.toml' Dockerfile docker-compose.yml
 
-    - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v5
-      with:
-        python-version: ${{ matrix.python-version }}
+  browser-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install Chromium and Playwright
+        run: |
+          npm install --no-save playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Test full browser detection and CSV export
+        run: |
+          cp qrs_detector.py web/qrs_detector.py
+          python -m http.server 8765 --bind 127.0.0.1 --directory web >/tmp/ecg-browser-server.log 2>&1 &
+          node tests/browser-smoke.cjs
 
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install fastapi uvicorn pydantic pytest
-
-    - name: Run Pytest Suite
-      run: |
-        pytest -v
-
-    - name: Security SAST & Zero-PHI Audit
-      run: |
-        python -c "
-        from agents.base import PHIGuard, AuditLogger
-        import pytest
-        assert AuditLogger.verify_integrity() is True
-        print('Security & Zero-PHI Audit Passed!')
-        "
+  container-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build API image
+        run: docker build -t ecg-qrs-detector-smoke .
+      - name: Exercise FastAPI health endpoint
+        run: |
+          docker run -d --name ecg-qrs-smoke -p 127.0.0.1:18000:8000 -e AUDIT_SECRET_KEY=smoke-test-ephemeral-key ecg-qrs-detector-smoke
+          ok=0
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:18000/health | grep -q '"HEALTHY"'; then ok=1; break; fi
+            sleep 2
+          done
+          docker logs ecg-qrs-smoke
+          docker rm -f ecg-qrs-smoke
+          test "$ok" -eq 1
