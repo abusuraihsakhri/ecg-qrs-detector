@@ -80,6 +80,7 @@ async function process(run) {
   } catch (exc) {
     lastAnalysis = null;
     summaryEl.hidden = true;
+    el("empty-prompt").hidden = false;
     status("Analysis failed.");
     error(String(exc && exc.message ? exc.message : exc));
   } finally {
@@ -140,6 +141,7 @@ function showAnalysis(data) {
   el("file-info").textContent = data.sample_count.toLocaleString() + " samples · " +
     formatted(data.fs, 2) + " Hz · " + formatted(data.duration_sec, 2) + " s";
   summaryEl.hidden = false;
+  el("empty-prompt").hidden = true;
   drawPlot(data);
 }
 
