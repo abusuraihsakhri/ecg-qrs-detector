@@ -9,7 +9,7 @@ const { chromium } = require("playwright");
     const page = await browser.newPage({ acceptDownloads: true });
     const errors = [];
     page.on("pageerror", (err) => errors.push(err.message));
-    await page.goto("http://127.0.0.1:8765/", { waitUntil: "domcontentloaded" });
+    await page.goto(process.env.SITE_URL || "http://127.0.0.1:8765/", { waitUntil: "domcontentloaded" });
     await page.waitForFunction(
       () => !document.getElementById("run-demo").disabled,
       null, { timeout: 120000 }
@@ -28,8 +28,18 @@ const { chromium } = require("playwright");
     assert.equal(download.suggestedFilename(), "ecg_r_peaks.csv");
     const rows = (await fs.readFile(await download.path(), "utf8")).trim().split("\n");
     assert.equal(rows.length, beats + 1);
+    await page.locator("#ecg-file").setInputFiles("sample_ecg.csv");
+    await page.getByRole("button", { name: "Analyze CSV" }).click();
+    await page.waitForFunction(
+      () => !document.getElementById("run-file").disabled &&
+        document.getElementById("status").textContent.includes("Analysis completed"),
+      null, { timeout: 120000 }
+    );
+    const uploadedBeats = Number(await page.locator("#beat-count").textContent());
+    assert(uploadedBeats > 2, "CSV upload did not detect R-peaks.");
     assert.deepEqual(errors, []);
-    console.log("Browser ECG demo and peak export passed (" + beats + " beats)");
+    console.log("Browser synthetic demo, CSV upload and export passed (" +
+      beats + " synthetic beats; " + uploadedBeats + " CSV beats)");
   } finally {
     await browser.close();
   }
