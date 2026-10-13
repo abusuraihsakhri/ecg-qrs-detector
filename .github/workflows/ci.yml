@@ -33,3 +33,43 @@ jobs:
         run: |
           grep -q 'CMD \["uvicorn"' Dockerfile
           ! grep -Eq 'prod-audit-key|master-audit-key|COPY pyproject.toml' Dockerfile docker-compose.yml
+
+  browser-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install Chromium and Playwright
+        run: |
+          npm install --no-save playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Test full browser detection and CSV export
+        run: |
+          cp qrs_detector.py web/qrs_detector.py
+          python -m http.server 8765 --bind 127.0.0.1 --directory web >/tmp/ecg-browser-server.log 2>&1 &
+          node tests/browser-smoke.cjs
+
+  container-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build API image
+        run: docker build -t ecg-qrs-detector-smoke .
+      - name: Exercise FastAPI health endpoint
+        run: |
+          docker run -d --name ecg-qrs-smoke -p 127.0.0.1:18000:8000 -e AUDIT_SECRET_KEY=smoke-test-ephemeral-key ecg-qrs-detector-smoke
+          ok=0
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:18000/health | grep -q '"HEALTHY"'; then ok=1; break; fi
+            sleep 2
+          done
+          docker logs ecg-qrs-smoke
+          docker rm -f ecg-qrs-smoke
+          test "$ok" -eq 1
