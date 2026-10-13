@@ -1,0 +1,38 @@
+name: Verify deployed ECG Pages app
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - tests/browser-smoke.cjs
+      - .github/workflows/live-smoke.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  live-browser-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      SITE_URL: https://abusuraihsakhri.github.io/ecg-qrs-detector/
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Verify public Pages resources
+        run: |
+          curl --fail --location --silent --show-error --retry 5 --retry-delay 3 "$SITE_URL" -o /tmp/ecg-pages.html
+          grep -q "ECG QRS Detector" /tmp/ecg-pages.html
+          curl --fail --location --silent --show-error --retry 5 --retry-delay 3 "$SITE_URL"qrs_detector.py -o /tmp/ecg-pages-detector.py
+          curl --fail --location --silent --show-error --retry 5 --retry-delay 3 "$SITE_URL"analysis.py -o /tmp/ecg-pages-bridge.py
+          curl --fail --location --silent --show-error --retry 5 --retry-delay 3 "$SITE_URL"app.js -o /tmp/ecg-pages-app.js
+          test -s /tmp/ecg-pages-detector.py
+      - name: Install Playwright and Chromium
+        run: |
+          npm install --no-save playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Exercise deployed analysis and export
+        run: node tests/browser-smoke.cjs
