@@ -12,12 +12,12 @@ const { chromium } = require("playwright");
     await page.goto("http://127.0.0.1:8765/", { waitUntil: "domcontentloaded" });
     await page.waitForFunction(
       () => !document.getElementById("run-demo").disabled,
-      { timeout: 120000 }
+      null, { timeout: 120000 }
     );
     await page.getByRole("button", { name: "Try synthetic ECG" }).click();
     await page.waitForFunction(
       () => !document.getElementById("summary").hidden,
-      { timeout: 120000 }
+      null, { timeout: 120000 }
     );
     const beats = Number(await page.locator("#beat-count").textContent());
     assert(beats >= 8 && beats <= 20, "Unexpected synthetic R-peak count: " + beats);
