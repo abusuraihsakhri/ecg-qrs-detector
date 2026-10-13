@@ -42,6 +42,8 @@ def load_ecg_csv(path, fs=None):
 
     Returns (samples_list, fs).
     """
+    if fs is not None and (not math.isfinite(fs) or fs <= 0):
+        raise ValueError("Sampling rate fs must be positive and finite")
     with open(path, "r", newline="") as f:
         reader = csv.reader(f)
         rows = [row for row in reader if row and any(cell.strip() for cell in row)]
@@ -62,26 +64,32 @@ def load_ecg_csv(path, fs=None):
         raise ValueError(f"No numeric data rows found in {path}")
 
     ncols = len(data_rows[0])
+    if ncols not in (1, 2) or any(len(row) != ncols for row in data_rows):
+        raise ValueError("CSV must contain consistent one- or two-column rows")
 
-    if ncols >= 2:
+    if ncols == 2:
         times = [float(r[0]) for r in data_rows]
-        amps = [float(r[1]) for r in data_rows]
-        # Derive fs from median time step
-        diffs = [times[i + 1] - times[i] for i in range(len(times) - 1)]
-        diffs.sort()
-        dt = diffs[len(diffs) // 2]  # median
-        if dt <= 0:
-            raise ValueError("Non-increasing timestamps in ECG file")
+        samples = [float(r[1]) for r in data_rows]
+        if len(times) < 2:
+            raise ValueError("At least two timestamps are required")
+        if not all(math.isfinite(value) for value in times + samples):
+            raise ValueError("ECG CSV contains non-finite values")
+        diffs = [b - a for a, b in zip(times, times[1:])]
+        if any(dt <= 0 for dt in diffs):
+            raise ValueError("ECG timestamps must be strictly increasing")
+        sorted_diffs = sorted(diffs)
+        dt = sorted_diffs[len(sorted_diffs) // 2]
         derived_fs = 1.0 / dt
-        out_fs = fs if fs is not None else derived_fs
-        return amps, out_fs
-    else:
-        samples = [float(r[0]) for r in data_rows]
-        if fs is None:
-            raise ValueError(
-                "Single-column CSV has no time information; supply --fs explicitly"
-            )
-        return samples, fs
+        if not math.isfinite(derived_fs):
+            raise ValueError("Could not derive a finite sampling rate")
+        return samples, fs if fs is not None else derived_fs
+
+    samples = [float(r[0]) for r in data_rows]
+    if not all(math.isfinite(value) for value in samples):
+        raise ValueError("ECG CSV contains non-finite values")
+    if fs is None:
+        raise ValueError("Single-column CSV has no time information; supply --fs explicitly")
+    return samples, fs
 
 
 # ── Filtering primitives (pure Python) ───────────────────────────────
@@ -230,10 +238,12 @@ def detect_r_peaks(ecg, fs, refractory_sec=0.200):
 
     Returns (r_peak_indices, pipeline_dict).
     """
-    if fs <= 0:
-        raise ValueError(f"Sampling rate fs must be positive, got {fs}")
-    if refractory_sec < 0:
-        raise ValueError(f"Refractory period must be non-negative, got {refractory_sec}")
+    if not math.isfinite(fs) or fs <= 0:
+        raise ValueError(f"Sampling rate fs must be positive and finite, got {fs}")
+    if not math.isfinite(refractory_sec) or refractory_sec < 0:
+        raise ValueError(f"Refractory period must be non-negative and finite, got {refractory_sec}")
+    if not all(math.isfinite(v) for v in ecg):
+        raise ValueError("ECG samples must be finite")
     if not ecg:
         return [], {"filtered": [], "derivative": [], "squared": [], "integrated": [], "r_peak_indices": []}
     pt = pan_tompkins_pipeline(ecg, fs)
@@ -307,8 +317,10 @@ def compute_hrv_metrics(r_peak_indices, fs):
         n_beats, mean_hr_bpm, instantaneous_hr_bpm (list),
         rr_intervals_ms (list), sdnn_ms, rmssd_ms, pnn50_pct
     """
-    if fs <= 0:
-        raise ValueError(f"Sampling rate fs must be positive, got {fs}")
+    if not math.isfinite(fs) or fs <= 0:
+        raise ValueError(f"Sampling rate fs must be positive and finite, got {fs}")
+    if any(b <= a for a, b in zip(r_peak_indices, r_peak_indices[1:])):
+        raise ValueError("R-peak indices must be strictly increasing")
     n_beats = len(r_peak_indices)
     nan = float("nan")
 
@@ -329,7 +341,8 @@ def compute_hrv_metrics(r_peak_indices, fs):
     rr_ms = [s * 1000.0 for s in rr_sec]
 
     instantaneous_hr = [60.0 / s for s in rr_sec]
-    mean_hr = sum(instantaneous_hr) / len(instantaneous_hr)
+    # Rate calculated from the mean RR interval, not the arithmetic mean of instantaneous rates.
+    mean_hr = 60.0 / (sum(rr_sec) / len(rr_sec))
 
     # SDNN
     if len(rr_ms) > 1:
@@ -419,12 +432,12 @@ def generate_synthetic_ecg(duration_sec=30.0, fs=250.0, heart_rate_bpm=70.0,
 
     Returns (samples_list, true_r_peak_indices).
     """
-    if duration_sec <= 0:
-        raise ValueError(f"Duration must be positive, got {duration_sec}")
-    if fs <= 0:
-        raise ValueError(f"Sampling rate fs must be positive, got {fs}")
-    if heart_rate_bpm <= 0:
-        raise ValueError(f"Heart rate must be positive, got {heart_rate_bpm}")
+    if not math.isfinite(duration_sec) or duration_sec <= 0:
+        raise ValueError(f"Duration must be positive and finite, got {duration_sec}")
+    if not math.isfinite(fs) or fs <= 0:
+        raise ValueError(f"Sampling rate fs must be positive and finite, got {fs}")
+    if not math.isfinite(heart_rate_bpm) or heart_rate_bpm <= 0:
+        raise ValueError(f"Heart rate must be positive and finite, got {heart_rate_bpm}")
     # Simple LCG random number generator for reproducibility
     class SimpleRNG:
         def __init__(self, seed):
